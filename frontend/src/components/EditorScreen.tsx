@@ -1,0 +1,32 @@
+import { ArrowLeft, ArrowRight, Check, RefreshCw, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import type { Outfit, Product, ReplacementInput, RequestState } from '../types'
+import { DemoBadge, Loading, ProductFacts, ProductImage } from './Primitives'
+import { categoryName, money } from '../lib/presentation'
+import { OutfitRender } from './OutfitRender'
+
+function ReplacementDialog({ oldProduct, products, busy, onChoose, onClose }: { oldProduct: Product; products: Product[]; busy: boolean; onChoose: (p: Product) => Promise<void>; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => { const element = dialog.current; element?.showModal(); return () => { element?.close() } }, [])
+  return <dialog aria-label="Заменить предмет" className="replacement-dialog" ref={dialog} onCancel={e => { e.preventDefault(); if (!busy) onClose() }} onClick={e => { if (e.target === e.currentTarget && !busy) onClose() }}><div className="dialog-content"><div className="dialog-heading"><div><span className="eyebrow">{categoryName(oldProduct.category)}</span><h2>Новый штрих.</h2></div><button className="icon-button" onClick={onClose} disabled={busy} aria-label="Закрыть замену"><X size={21} /></button></div><p className="dialog-subtitle">Заменяем «{oldProduct.title}». Только вещи из текущего каталога.</p>{products.length ? <div className="replacement-grid">{products.map(p => <button key={p.id} data-product-id={p.id} aria-label={`Выбрать ${p.title} — ${p.source_id}`} className="replacement-card" disabled={busy} onClick={() => void onChoose(p)}><ProductImage product={p} /><span className="replacement-source">{p.source_id}{p.is_demo ? <DemoBadge /> : null}</span><span className="replacement-title">{p.title}</span><span className="replacement-price">{money(p.price_rub)}</span><span className="replacement-action">{busy ? <Loading>Обновляем</Loading> : <>Выбрать<ArrowRight size={14} /></>}</span></button>)}</div> : <div className="dialog-empty"><p>Других вещей этой категории в отборе нет.</p><span>Можно вернуться в каталог или создать новый запрос.</span></div>}<p className="dialog-footnote">Остальные вещи в образе останутся на своих местах.</p></div></dialog>
+}
+
+export function EditorScreen({ outfit, request, busy, snapshotRevision, onReplace, onSave, onBack }: { outfit: Outfit; request: RequestState; busy: string | null; snapshotRevision: number | null; onReplace: (id: string, input: ReplacementInput) => Promise<boolean>; onSave: (id: string) => Promise<boolean>; onBack: () => void }) {
+  const [replaceId, setReplaceId] = useState<string | null>(null)
+  const products = request.catalog.products
+  const productMap = new Map(products.map(p => [p.id, p]))
+  const items = outfit.product_ids.map(id => productMap.get(id)).filter((p): p is Product => !!p)
+  const old = replaceId ? productMap.get(replaceId) : undefined
+  const demo = request.brief.mode === 'demo' || items.some(p => p.is_demo)
+  const replacing = busy === `replace:${outfit.id}`
+  const saving = busy === `save:${outfit.id}`
+  const candidates = old ? products.filter(p => p.category === old.category && p.id !== old.id && !outfit.product_ids.includes(p.id) && !request.excluded_product_ids.includes(p.id) && p.availability !== 'out_of_stock') : []
+  async function choose(product: Product) { if (!old) return; await onReplace(outfit.id, { old_product_id: old.id, new_product_id: product.id, expected_revision: outfit.revision }); setReplaceId(null) }
+  async function save() { if (await onSave(outfit.id)) onBack() }
+  return <main className="editor-screen page-enter"><div className="editor-topline"><button className="back-link" onClick={onBack} disabled={!!busy}><ArrowLeft size={15} />В галерею</button><span className="revision">ВЕРСИЯ {outfit.revision}</span></div><div className="page-heading editor-heading"><div><span className="eyebrow">ВАШ ОБРАЗ</span><h1>{outfit.title}</h1><p>Сочетание из выбранных вами вещей.</p>{outfit.explanation ? <details className="outfit-explanation"><summary>О составе образа</summary><p>{outfit.explanation}</p></details> : null}</div><button className="button button-primary" disabled={!!busy} onClick={() => void save()}>{saving ? <Loading>Сохраняем</Loading> : <>{outfit.saved ? <Check size={16} /> : null}{outfit.saved ? 'Сохранить и в галерею' : 'Сохранить образ'}<ArrowRight size={16} /></>}</button></div>
+    {snapshotRevision !== null && outfit.revision > snapshotRevision ? <p className="version-note">Для редактирования открыта актуальная версия образа. Ранее сохранённый вариант остаётся в галерее до следующего сохранения.</p> : null}
+    <div className="editor-layout"><div className="editor-visual"><div className="mannequin-stage"><OutfitRender key={`${outfit.id}:${outfit.revision}`} outfit={outfit} />{demo ? <span className="stage-demo"><DemoBadge /></span> : null}<span className="stage-wordmark" aria-hidden>VÉLOR</span></div><p className="render-disclaimer">{outfit.render_disclaimer || (demo ? 'Демо-визуализация. Точное соответствие посадки и фактуры не гарантируется.' : 'Визуализация помогает оценить сочетание вещей.')}</p></div>
+    <aside className="editor-items"><div className="items-heading"><h2>В деталях</h2><span>{items.length} вещей</span></div>{items.map((product, i) => <article className="editor-item" data-product-id={product.id} key={product.id}><span className="item-number">{String(i + 1).padStart(2, '0')}</span><ProductImage product={product} /><div className="item-details"><span className="item-category">{categoryName(product.category)}</span><ProductFacts product={product} /><button className="replace-button" onClick={() => setReplaceId(product.id)} disabled={!!busy}><RefreshCw size={12} />Заменить</button></div></article>)}{items.length !== outfit.product_ids.length ? <p className="inline-error">Часть вещей недоступна в текущем каталоге. Обновите подборку.</p> : null}<div className="editor-total"><span>Стоимость вещей</span><strong>{items.length === outfit.product_ids.length && items.every(p => p.price_rub !== null) ? money(items.reduce((sum, p) => sum + (p.price_rub ?? 0), 0)) : 'Уточняется'}</strong></div><p className="subtle">Можно заменить одну вещь — мы обновим визуализацию, сохранив остальной образ.</p></aside></div>
+    {old ? <ReplacementDialog oldProduct={old} products={candidates} busy={replacing} onChoose={choose} onClose={() => setReplaceId(null)} /> : null}
+  </main>
+}

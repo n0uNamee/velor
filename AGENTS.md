@@ -1,0 +1,1 @@
+Read CONTRACTS.md before editing. Respect ownership. Never read unrelated .env or timing-bot. No external user-image transmission. No provider credentials provisioned without per-action user permission. Demo must be explicit. Record actual verification, never claim unrun tests. Shared working tree: do not reset or overwrite others' changes.

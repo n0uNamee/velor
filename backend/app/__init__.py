@@ -1,0 +1,1 @@
+"""VÉLOR application."""

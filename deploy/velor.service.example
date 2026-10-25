@@ -1,0 +1,20 @@
+# Example Linux service. Requires an existing user, checkout, venv, and data dir.
+[Unit]
+Description=VELOR API
+After=network.target
+
+[Service]
+Type=simple
+User=velor
+Group=velor
+WorkingDirectory=/srv/velor
+EnvironmentFile=/etc/velor/backend.env
+ExecStart=/srv/velor/.venv/bin/python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/velor
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
