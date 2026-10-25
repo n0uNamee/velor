@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import math
 import time
+import os
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, TypeVar
 
@@ -189,7 +190,11 @@ class SearchPipeline:
                         challenge = detect_block_page(page.text)
                         if challenge:
                             raise FetchError("inaccessible", challenge + "; no bypass attempted", page.url)
-                        candidates = extract_candidates(page.text, page.url, source, limit=budget.candidates_per_source)
+                        if source.id == "okno":
+                            from .okno import extract_okno_candidates
+                            candidates = extract_okno_candidates(page.text, page.url, brief.original_request_text, limit=budget.candidates_per_source)
+                        else:
+                            candidates = extract_candidates(page.text, page.url, source, limit=budget.candidates_per_source)
                     for candidate in list(candidates)[:budget.candidates_per_source]:
                         enqueue(candidate, report)
                     if report.pending:
@@ -340,4 +345,9 @@ class SearchPipeline:
 
 
 async def search_catalog(brief: StyleBrief, on_source: SourceCallback | None = None) -> ProductCatalog:
+    if brief.mode == "live" and os.getenv("VELOR_SEARCH_SOURCE") == "okno":
+        from .discovery import UnconfiguredDiscoveryProvider
+        source = SourceDefinition("okno", "OKNO · публичный каталог", ("okno.store",), "https://okno.store/", r"/item/[^/]+")
+        return await SearchPipeline(sources=(source,), discovery_provider=UnconfiguredDiscoveryProvider(),
+            budgets=SearchBudgets(total_seconds=25, candidates_per_source=4)).search(brief, on_source)
     return await SearchPipeline().search(brief, on_source)

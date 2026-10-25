@@ -380,6 +380,9 @@ def extract_product(html: str, page_url: str) -> ExtractedProduct | None:
     A listing with several Products is not sufficient evidence of one card. A
     product URL in JSON-LD must identify the fetched path and semantic query.
     """
+    if host_matches(page_url, ("okno.store",)):
+        from .okno import extract_okno_product
+        return extract_okno_product(html, page_url)
     document = _Document(html)
     products = [node for root in document.jsonld for node in _card_products(root)]
     page_identity = _identity(page_url)

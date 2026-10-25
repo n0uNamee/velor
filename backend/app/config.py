@@ -25,6 +25,12 @@ class Settings:
     provider_budget_usd: float = 0.0
     analysis_reserve_usd: float = 0.0
     render_reserve_usd: float = 0.0
+    frontend_dist: Path | None = None
+    telegram_allowed_user_ids: tuple[int, ...] = ()
+    locked_preview: bool = False
+    auth_mode: str = "telegram"
+    web_allowed_origins: tuple[str, ...] = ()
+    search_source: str = "all"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -44,6 +50,12 @@ class Settings:
             provider_budget_usd=float(os.getenv("VELOR_PROVIDER_BUDGET_USD", "0")),
             analysis_reserve_usd=float(os.getenv("VELOR_ANALYSIS_RESERVE_USD", "0")),
             render_reserve_usd=float(os.getenv("VELOR_RENDER_RESERVE_USD", "0")),
+            frontend_dist=Path(os.environ["VELOR_FRONTEND_DIST"]) if os.getenv("VELOR_FRONTEND_DIST") else None,
+            telegram_allowed_user_ids=tuple(int(x.strip()) for x in os.getenv("VELOR_TELEGRAM_ALLOWED_USER_IDS", "").split(",") if x.strip()),
+            locked_preview=os.getenv("VELOR_LOCKED_PREVIEW", "0") == "1",
+            auth_mode=os.getenv("VELOR_AUTH_MODE", "telegram"),
+            web_allowed_origins=tuple(x.strip().rstrip("/") for x in os.getenv("VELOR_WEB_ALLOWED_ORIGINS", "").split(",") if x.strip()),
+            search_source=os.getenv("VELOR_SEARCH_SOURCE", "all"),
         )
 
     def validate(self) -> None:
@@ -51,11 +63,23 @@ class Settings:
             raise ValueError("VELOR_ENV must be development, test, or production")
         if self.mode not in {"demo", "live"}:
             raise ValueError("VELOR_MODE must be demo or live")
-        if self.environment == "production" and (self.enable_dev_auth or not self.telegram_bot_token):
+        if self.auth_mode not in {"telegram", "web"}:
+            raise ValueError("Unknown auth mode")
+        if self.auth_mode == "web" and not self.web_allowed_origins:
+            raise ValueError("Web sessions require allowed origins")
+        if self.environment == "production" and (self.enable_dev_auth or (self.auth_mode == "telegram" and not self.telegram_bot_token and not self.locked_preview)):
             raise ValueError("Production requires Telegram auth and forbids dev auth")
+        if self.environment == "production" and self.auth_mode == "telegram" and not self.telegram_allowed_user_ids and not self.locked_preview:
+            raise ValueError("Production requires VELOR_TELEGRAM_ALLOWED_USER_IDS")
+        if any(isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0 for user_id in self.telegram_allowed_user_ids):
+            raise ValueError("Telegram allowed user IDs must be positive integers")
+        if self.locked_preview and (self.environment != "production" or self.allow_paid_requests):
+            raise ValueError("Locked preview must be production with paid requests disabled")
         if self.telegram_max_age_seconds <= 0:
             raise ValueError("Telegram auth lifetime must be positive")
         if not 0 <= self.provider_budget_usd <= 5:
             raise ValueError("Provider session budget must be between 0 and the user's total $5 ceiling")
         if not 0 <= self.analysis_reserve_usd <= 5 or not 0 <= self.render_reserve_usd <= 5:
             raise ValueError("Provider reservations must be finite, nonnegative, and within total budget")
+        if self.frontend_dist is not None and not (self.frontend_dist / "index.html").is_file():
+            raise ValueError("VELOR_FRONTEND_DIST must point to a built frontend containing index.html")

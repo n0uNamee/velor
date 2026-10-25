@@ -9,6 +9,7 @@ import type {
   ReplacementInput,
   RequestInput,
   RequestState,
+  WebSession,
 } from '../types';
 
 /** Never contains an auth header or the Telegram initData. */
@@ -30,7 +31,7 @@ interface ApiOptions {
 
 const statusMessages: Record<number, string> = {
   400: 'Проверьте данные и попробуйте ещё раз.',
-  401: 'Откройте VÉLOR через Telegram, чтобы продолжить.',
+  401: 'Войдите в VÉLOR, чтобы продолжить.',
   403: 'Нет доступа к этому действию.',
   404: 'Данные больше не доступны. Обновите страницу.',
   409: 'Образ уже изменился. Получаем актуальную версию.',
@@ -42,9 +43,16 @@ const statusMessages: Record<number, string> = {
   503: 'Сервис пока недоступен. Проверьте подключение backend.',
 };
 
+let webMode = false;
+let sessionCsrf: string | null = null;
+
 /** The Telegram signed payload stays in memory and is sent only to our API. */
 function authHeaders(publicEndpoint = false): Headers {
   const headers = new Headers({ Accept: 'application/json' });
+  if (webMode) {
+    if (sessionCsrf) headers.set('X-CSRF-Token', sessionCsrf);
+    return headers;
+  }
   const initData = typeof window === 'undefined' ? '' : window.Telegram?.WebApp?.initData;
   if (initData) {
     headers.set('Authorization', `tma ${initData}`);
@@ -79,6 +87,10 @@ async function send(path: string, method: string, options: ApiOptions = {}): Pro
 
   // Error bodies may echo user input. Use controlled messages and never log them.
   if (!response.ok) {
+    if (response.status === 401 && webMode && !path.startsWith('/session')) {
+      sessionCsrf = null;
+      window.dispatchEvent(new Event('velor-session-expired'));
+    }
     const message = statusMessages[response.status] ??
       (response.status >= 500 ? 'Ошибка сервера. Попробуйте ещё раз.' : 'Не удалось выполнить действие.');
     throw new ApiError(response.status, message);
@@ -99,7 +111,23 @@ const id = (value: string) => encodeURIComponent(value);
 
 /** One same-origin adapter; there is deliberately no automatic fixture fallback. */
 export const api = {
-  health: (signal?: AbortSignal) => call<Health>('/health', 'GET', { signal, public: true }),
+  health: async (signal?: AbortSignal) => {
+    const health = await call<Health>('/health', 'GET', { signal, public: true });
+    webMode = health.auth_status === 'web';
+    return health;
+  },
+  setWebSession: (csrfToken: string | null) => {
+    webMode = true;
+    sessionCsrf = csrfToken;
+  },
+  session: (signal?: AbortSignal) => call<WebSession>('/session', 'GET', { signal, public: true }),
+  login: (code: string, signal?: AbortSignal) =>
+    call<WebSession>('/session/login', 'POST', { body: { code }, signal, public: true }),
+  logout: async () => {
+    await call<WebSession>('/session/logout', 'POST', { public: true });
+    sessionCsrf = null;
+    window.dispatchEvent(new Event('velor-session-expired'));
+  },
   profile: (signal?: AbortSignal) => call<Profile | null>('/profile', 'GET', { signal }),
   saveProfile: (input: ProfileInput, signal?: AbortSignal) =>
     call<Profile>('/profile', 'PUT', { body: { style_text: input.style_text, images: input.images ?? [] }, signal }),
@@ -120,6 +148,8 @@ export const api = {
   },
   createRequest: (input: RequestInput, signal?: AbortSignal) =>
     call<RequestState>('/requests', 'POST', { body: { ...input, images: input.images ?? [] }, signal }),
+  juryDemo: (signal?: AbortSignal) =>
+    call<RequestState>('/demo/jury', 'POST', { body: {}, signal }),
   request: (requestId: string, signal?: AbortSignal) =>
     call<RequestState>(`/requests/${id(requestId)}`, 'GET', { signal }),
   removeProduct: (requestId: string, productId: string, signal?: AbortSignal) =>

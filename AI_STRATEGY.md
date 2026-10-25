@@ -1,5 +1,7 @@
 # VÉLOR: фактическая AI-стратегия
 
+Актуальное решение17:37 МСК: обычный сайт, Telegram не требуется. Подготовленный сценарий использует реальный датированный снимок OKNO; профиль синтетический, состояние/сохранение настоящие и изолированы сессией. Live OKNO homepage→item SSR→verified price/size/stock успешно проверен; condition и доставка неизвестны, это явно сохранено. Preview детерминированный schematic, не фотореалистичный AI render. Один реальный OpenRouter image POST завершился неопределённой ошибкой, его HTTP status не сохранился; последующий публичный Models GET получил403 и запросы остановлены. Ledger удерживает0.30 USD, actual known0.00255825, conservative remaining1.70 из разрешённых2; повторов inference нет.
+
 ## Boss1: профиль и versioned StyleBrief
 
 Вход — постоянный профиль со style text, wardrobe/reference images и отдельный запрос. Выход — `StyleBrief` schema `1.0`: исходные тексты, provenance `profile/request/inferred`, hard/soft constraints, exclusions, бюджет, размеры, город и неизвестные значения.

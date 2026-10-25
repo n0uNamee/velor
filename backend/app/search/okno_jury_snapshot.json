@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "products": [
+    {
+      "id": "product-63ff56980f26a05bbc19",
+      "title": "брюки miss sixty",
+      "category": "bottoms",
+      "source_id": "okno",
+      "source_url": "https://okno.store/item/bryuki-miss-sixty",
+      "image_url": "https://cdn.insales-shop.ru/images/products/1/137/3367805065/IMG_8772.jpg",
+      "price_rub": 4200.0,
+      "price_note": "Снимок публичной карточки OKNO от 25.10.2026 17:20 МСК; цена и наличие могут измениться. Состояние new/used и доставка не подтверждены. Обычная цена за подтвержденный размер s: 4200 ₽. OKNO public item payload; condition and city-specific delivery require independent evidence.",
+      "sizes": [
+        "s"
+      ],
+      "availability": "in_stock",
+      "verified_at": "2026-10-25T14:20:11.098716+00:00",
+      "verification": "verified",
+      "evidence": [
+        "OKNO actual public catalog /item/ hyperlink; local lexical query filter",
+        "OKNO fetched item URL: https://okno.store/item/bryuki-miss-sixty",
+        "title: брюки miss sixty; __NEXT_DATA__.props.pageProps.item.title",
+        "item code matches fetched /item/ path: bryuki-miss-sixty",
+        "availability: in_stock; explicit item.available and item.isHidden",
+        "ordinary price: 4200 RUB; item.price and item.formatRubPrice=4 200 RUB",
+        "size-specific stock: s; exactly one item.variants entry and item.available=true, item.isHidden=false",
+        "condition: unknown; not stated in observed item payload",
+        "unverified general delivery context: Самовывоз (Москва, ул. Маросейка д. 2/15 стр. 1) Курьером в пределах МКАД (Доступно по Москве) — 800 RUB СДЭК (Отправления по РФ и СНГ до пункта СДЭК) — 500 RUB Доставка по Московской обл. (Доступно по Московской обл. до 15 км. от МКАД) — 1 200 RUB",
+        "Product page fetched: https://okno.store/item/bryuki-miss-sixty",
+        "Observed at: 2026-10-25T14:20:11.098716+00:00",
+        "Проверены название/категория/цена/размер/наличие OKNO. Соответствие мягким предпочтениям профиля не подтверждено.",
+        "style_match: supported lexical garment/features only; no image or semantic model analysis",
+        "condition: unknown",
+        "price-and-size-coupled city: unknown",
+        "price-and-size-coupled delivery: unknown",
+        "Inventory-backed sizes: s",
+        "Ordinary size-coupled price: 4200 RUB; sizes: s"
+      ],
+      "is_demo": false
+    }
+  ],
+  "sources": [
+    {
+      "source_id": "okno",
+      "name": "OKNO · публичный каталог",
+      "state": "complete",
+      "found": 1,
+      "detail": "Ссылок: 1; подтверждено: 1; отклонено: 0."
+    },
+    {
+      "source_id": "discovery",
+      "name": "Открытый интернет · discovery",
+      "state": "unconfigured",
+      "found": 0,
+      "detail": "External internet search provider is not configured; no discovery was run."
+    }
+  ],
+  "warnings": [
+    "Открытый интернет · discovery: External internet search provider is not configured; no discovery was run.",
+    "Подготовленный сценарий жюри: реальные данные OKNO, проверенные 25.10.2026 17:20 МСК. В снимке одна вещь; доступной альтернативы для замены нет. Preview схематический, не AI-примерка."
+  ]
+}

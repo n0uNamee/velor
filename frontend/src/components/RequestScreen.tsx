@@ -5,7 +5,7 @@ import type { ImageRef, Profile, RequestInput } from '../types'
 import { Loading } from './Primitives'
 import { UploadField } from './UploadField'
 
-export function RequestScreen({ profile, busy, onCreate, onEditProfile }: { profile: Profile; busy: boolean; onCreate: (input: RequestInput) => Promise<boolean>; onEditProfile: () => void }) {
+export function RequestScreen({ profile, busy, onCreate, onEditProfile, catalogSource, onJuryDemo, juryBusy = false }: { profile: Profile; busy: boolean; onCreate: (input: RequestInput) => Promise<boolean>; onEditProfile: () => void; catalogSource?: string; onJuryDemo?: () => void; juryBusy?: boolean }) {
   const [text, setText] = useState('')
   const [images, setImages] = useState<ImageRef[]>([])
   const [budget, setBudget] = useState('')
@@ -19,9 +19,11 @@ export function RequestScreen({ profile, busy, onCreate, onEditProfile }: { prof
   return <main className="request-layout page-enter">
     <div className="request-title"><span className="eyebrow">НОВАЯ ПОДБОРКА</span><h1>Для ваших<br /><em>планов.</em></h1><p>Опишите повод и настроение.<br />Вещи сначала выбираете вы.</p><div className="request-process"><span className="active">01&nbsp; Запрос</span><span>02&nbsp; Отбор вещей</span><span>03&nbsp; Образы</span></div></div>
     <form className="request-form" onSubmit={e => void submit(e)}>
+      {onJuryDemo ? <div className="profile-summary"><Sparkles size={17} strokeWidth={1.3} /><div><strong>Заготовленный демонстрационный сценарий</strong><p>Каталог → отбор вещей → стилист → сохранение.</p></div><button type="button" onClick={onJuryDemo} disabled={busy || juryBusy || uploading.wardrobe || uploading.reference}>{juryBusy ? <Loading>Открываем демо</Loading> : 'Демо для жюри'}</button></div> : null}
       <label className="text-label" htmlFor="request-text">Какой образ ищем?</label>
+      {catalogSource === 'okno' ? <p className="field-hint">Подключён живой каталог OKNO. Начните с запроса «брюки». Состояние вещи и доставка уточняются у магазина.</p> : null}
       <textarea id="request-text" rows={5} value={text} onChange={e => setText(e.target.value)} placeholder="Например, образ для осенних прогулок по Москве. Хочу многослойность, удобную обувь и что-нибудь необычное…" maxLength={6000} />
-      <div className="request-examples">{['На каждый день', 'В офис', 'Особенный вечер'].map(example => <button className="text-chip" key={example} type="button" onClick={() => setText(example)}>{example}<ArrowRight size={12} /></button>)}</div>
+      <div className="request-examples">{(catalogSource === 'okno' ? ['Брюки', 'Джинсы', 'Куртка'] : ['На каждый день', 'В офис', 'Особенный вечер']).map(example => <button className="text-chip" key={example} type="button" onClick={() => setText(example)}>{example}<ArrowRight size={12} /></button>)}</div>
       <div className="profile-summary"><Sparkles size={17} strokeWidth={1.3} /><div><strong>Ваш профиль сохранён</strong><p>{profile.style_text || `В профиле ${profile.images.length} фото`}</p></div><button type="button" onClick={onEditProfile}>Изменить</button></div>
       <UploadField kind="wardrobe" title="Вещи для этого образа" hint="Добавьте то, с чем нужно сочетать подборку. Эти фото относятся только к запросу." totalCount={images.length} images={images.filter(i => i.kind === 'wardrobe')} onAdd={addImage} onRemove={removeImage} onBusyChange={v => setUploading(p => ({ ...p, wardrobe: v }))} />
       <UploadField kind="reference" title="Референсы к запросу" hint="Покажите настроение или желаемое сочетание." totalCount={images.length} images={images.filter(i => i.kind === 'reference')} onAdd={addImage} onRemove={removeImage} onBusyChange={v => setUploading(p => ({ ...p, reference: v }))} />

@@ -4,21 +4,25 @@ import importlib
 import ipaddress
 import logging
 import warnings
+import json
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import urlsplit
 from uuid import uuid4
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 
 from .auth import current_user
 from .brief import build_brief
 from .config import Settings
-from .models import Gallery, ImageRef, Outfit, Product, Profile, ProfileInput, ReplaceInput, RequestInput, RequestState, SaveInput, SourceStatus
+from .models import Gallery, ImageRef, Outfit, Product, ProductCatalog, Profile, ProfileInput, ReplaceInput, RequestInput, RequestState, SaveInput, SourceStatus
 from .store import Store
 from .providers import OpenRouterProvider, ProviderUnavailable
 
@@ -120,12 +124,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if tasks:
             await asyncio.gather(*list(tasks), return_exceptions=True)
 
-    app = FastAPI(title="VÉLOR", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="VÉLOR", version="0.1.0", lifespan=lifespan,
+                  docs_url=None if settings.environment == "production" else "/docs",
+                  redoc_url=None if settings.environment == "production" else "/redoc",
+                  openapi_url=None if settings.environment == "production" else "/openapi.json")
     app.state.settings = settings
+    if settings.auth_mode == "web":
+        from .web_auth import WebSessionManager, create_access_code, install_web_auth_routes
+        access_file = settings.data_dir / "web-access.json"
+        access = json.loads(access_file.read_text()) if access_file.is_file() else None
+        if not access or access.get("expires_at", 0) <= time.time():
+            access = create_access_code(access_file)
+        app.state.web_sessions = WebSessionManager(settings.data_dir, settings.web_allowed_origins,
+            access["code"], access["expires_at"], secure_cookie=settings.environment == "production")
+        install_web_auth_routes(app, app.state.web_sessions)
     app.add_middleware(BodyLimit, limit=settings.upload_max_bytes)
     app.add_middleware(CORSMiddleware, allow_origins=list(settings.cors_origins), allow_credentials=False,
                        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-                       allow_headers=["Authorization", "Content-Type", "X-Dev-User"])
+                       allow_headers=["Authorization", "Content-Type", "X-Dev-User", "X-CSRF-Token"])
 
     def store() -> Store:
         return app.state.store
@@ -283,10 +299,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/health")
     async def health():
         provider = app.state.provider.status()
-        local = "demo_local" if settings.mode == "demo" else "unconfigured"
-        return {"status": "ok", "mode": settings.mode, "environment": settings.environment,
-                "providers": {"brief": provider, "search": local, "render": provider}, "search_workers": 3,
-                "provider_budget": {"limit_usd": settings.provider_budget_usd, **store().provider_usage()}}
+        local = "demo_local" if settings.mode == "demo" else "okno_public_catalog" if settings.search_source == "okno" else "unconfigured"
+        result = {"status": "ok", "mode": settings.mode, "environment": settings.environment,
+                  "providers": {"brief": provider, "search": local, "render": provider}, "search_workers": 3,
+                  "auth_status": "web" if settings.auth_mode == "web" else "locked" if settings.locked_preview else "telegram" if settings.environment == "production" else "local_dev"}
+        result["catalog_source"] = settings.search_source
+        if settings.environment != "production":
+            result["provider_budget"] = {"limit_usd": settings.provider_budget_usd, **store().provider_usage()}
+        return result
 
     @app.get("/api/profile", response_model=Profile | None)
     async def get_profile(owner: str = Depends(current_user)):
@@ -364,6 +384,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                              brief=brief, created_at=timestamp())
         store().save_request(owner, state)
         spawn(search_job(owner, state.id))
+        return state
+
+    @app.post("/api/demo/jury", response_model=RequestState, status_code=201)
+    async def jury_demo(owner: str = Depends(current_user)):
+        now = timestamp()
+        previous = store().profile(owner)
+        images = []
+        for kind in ("wardrobe", "reference"):
+            image_id = uuid4().hex
+            content = (Path(__file__).parent / "demo_assets" / f"{kind}.png").read_bytes()
+            path = store().upload_dir / f"{image_id}.png"
+            path.write_bytes(content)
+            ref = ImageRef(id=image_id, kind=kind, url=f"/api/uploads/{image_id}", mime_type="image/png")
+            store().save_upload(owner, ref, path)
+            images.append(ref)
+        profile = Profile(id=previous.id if previous else uuid4().hex, style_text="Спокойный минимализм и свободный крой",
+                          images=images, created_at=previous.created_at if previous else now, updated_at=now)
+        store().save_profile(owner, profile)
+        payload = RequestInput(text="брюки")
+        snapshot = Path(__file__).parent / "search/okno_jury_snapshot.json"
+        catalog = ProductCatalog.model_validate_json(snapshot.read_text())
+        state = RequestState(id=uuid4().hex, profile_id=profile.id, text=payload.text, status="selection",
+                             brief=build_brief(profile, payload, "live"), catalog=catalog, created_at=now)
+        store().save_request(owner, state)
         return state
 
     @app.get("/api/requests/{request_id}", response_model=RequestState)
@@ -451,6 +495,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/gallery", response_model=Gallery)
     async def gallery(owner: str = Depends(current_user)):
         return store().gallery(owner)
+
+    # Public deployment serves the built app and API from one origin. Vite is
+    # never involved; API routes/auth are registered before this static mount.
+    if settings.frontend_dist is not None:
+        app.mount("/", StaticFiles(directory=settings.frontend_dist, html=True), name="frontend")
 
     return app
 

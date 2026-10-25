@@ -39,11 +39,14 @@ def build_brief(profile: Profile, request: RequestInput, mode: str) -> StyleBrie
     if profile.images or request.images:
         unknowns.append("Изображения сохранены локально; содержимое не анализировалось внешним AI.")
     unknowns.append("Свободный текст сохранен с происхождением; точное понимание стиля требует подтверждения человеком.")
+    category_terms = {"headwear": r"шапк|кепк|панам", "tops": r"футбол|рубаш|худи|свитер|куртк|топ\b",
+                      "bottoms": r"брюк|джинс|шорт|юбк", "shoes": r"кроссов|кед|ботин|туфл", "accessories": r"сумк|ремень|шарф|аксессуар"}
+    requested_categories = [category for category, pattern in category_terms.items() if re.search(pattern, request.text, re.I)]
     return StyleBrief(
         id=uuid4().hex, profile_id=profile.id,
         original_profile_text=profile.style_text, original_request_text=request.text,
         images=list({image.id: image for image in profile.images + request.images}.values()),
-        categories=list(CATEGORIES), search_queries=[x for x in [profile.style_text.strip(), request.text.strip()] if x],
+        categories=requested_categories or list(CATEGORIES), search_queries=[x for x in [profile.style_text.strip(), request.text.strip()] if x],
         constraints=constraints, preferences=preferences, exclusions=exclusions,
         budget_rub=budget, sizes=sizes, city=request.city or None,
         unknowns=unknowns, mode=mode,

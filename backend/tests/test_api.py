@@ -112,10 +112,54 @@ def test_telegram_valid_invalid_and_expiry():
 def test_production_fails_closed_and_rejects_dev(tmp_path):
     with pytest.raises(ValueError):
         create_app(Settings(environment="production", data_dir=tmp_path))
-    app = create_app(Settings(environment="production", enable_dev_auth=False, telegram_bot_token="test-token", data_dir=tmp_path))
+    app = create_app(Settings(environment="production", enable_dev_auth=False, telegram_bot_token="test-token", telegram_allowed_user_ids=(123,), data_dir=tmp_path))
     with TestClient(app) as client:
         assert client.get("/api/profile", headers=DEV).status_code == 401
         assert client.get("/api/profile", headers={"Authorization": "tma " + signed_data()}).status_code == 200
+        assert client.get("/api/profile", headers={"Authorization": "tma " + signed_data(user_id=456)}).status_code == 403
+        assert "provider_budget" not in client.get("/api/health").json()
+        assert client.get("/docs").status_code == 404
+        assert client.get("/openapi.json").status_code == 404
+
+
+def test_single_origin_static_production_requires_telegram_for_all_mutations(tmp_path, adapters):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html><title>VÉLOR built frontend</title>")
+    config = Settings(environment="production", enable_dev_auth=False, telegram_bot_token="test-token", telegram_allowed_user_ids=(123,),
+                      frontend_dist=dist, data_dir=tmp_path / "storage")
+    with TestClient(create_app(config)) as client:
+        assert client.get("/").status_code == 200
+        assert "built frontend" in client.get("/").text
+        assert client.get("/api/health").json()["environment"] == "production"
+        assert client.get("/api/does-not-exist").status_code == 404
+        assert client.get("/api/profile", headers=DEV).status_code == 401
+        for path, body in [("/api/profile", {"style_text": "synthetic"}), ("/api/requests", {"text": "synthetic"}), ("/api/requests/missing/style", {})]:
+            method = client.put if path.endswith("profile") else client.post
+            assert method(path, json=body).status_code == 401
+        auth = {"Authorization": "tma " + signed_data()}
+        assert client.put("/api/profile", headers=auth, json={"style_text": "synthetic"}).status_code == 200
+        assert client.get("/api/profile", headers=auth).json()["style_text"] == "synthetic"
+        assert client.app.state.store.provider_usage()["calls"] == 0
+
+
+def test_public_entry_without_bot_is_locked_and_cannot_spend(tmp_path, adapters):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<!doctype html><title>Locked entry</title>")
+    config = Settings(environment="production", enable_dev_auth=False, locked_preview=True,
+                      frontend_dist=dist, data_dir=tmp_path / "storage")
+    with TestClient(create_app(config)) as client:
+        assert client.get("/").status_code == 200
+        assert client.get("/api/health").json()["auth_status"] == "locked"
+        for headers in [{}, DEV, {"Authorization": "tma " + signed_data()}]:
+            assert client.get("/api/profile", headers=headers).status_code == 401
+            assert client.post("/api/requests", headers=headers, json={"text": "synthetic"}).status_code == 401
+        for path in ["/.env", "/data/velor.sqlite3", "/docs", "/openapi.json"]:
+            assert client.get(path).status_code == 404
+        assert client.app.state.store.provider_usage()["calls"] == 0
+    with pytest.raises(ValueError):
+        create_app(Settings(environment="production", enable_dev_auth=False, locked_preview=True, allow_paid_requests=True))
 
 
 def test_profile_required_and_isolated(client):
@@ -125,6 +169,17 @@ def test_profile_required_and_isolated(client):
     assert first["id"] == second["id"]
     assert client.get("/api/profile", headers=BOB).json() is None
     assert client.put("/api/profile", headers=DEV, json={"style_text": "x", "extra": "bad"}).status_code == 422
+
+
+def test_jury_snapshot_is_real_dated_and_session_isolated(client):
+    response = client.post("/api/demo/jury", headers=DEV, json={})
+    assert response.status_code == 201
+    state = response.json()
+    assert state["status"] == "selection" and state["brief"]["mode"] == "live"
+    assert state["catalog"]["products"][0]["source_id"] == "okno"
+    assert state["catalog"]["products"][0]["is_demo"] is False
+    assert "25.10.2026" in state["catalog"]["products"][0]["price_note"]
+    assert client.get(f"/api/requests/{state['id']}", headers=BOB).status_code == 404
 
 
 def test_brief_provenance_nulls_no_automatic_stylist(client):

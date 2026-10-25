@@ -42,13 +42,20 @@ def validate_init_data(raw: str, token: str, max_age: int, now: int | None = Non
 
 async def current_user(request: Request) -> str:
     settings = request.app.state.settings
+    if settings.auth_mode == "web":
+        return request.app.state.web_sessions.authenticate(request)
+    if settings.locked_preview:
+        raise HTTPException(401, "Telegram access is not configured; public entry is locked")
     authorization = request.headers.get("Authorization", "")
     dev_user = request.headers.get("X-Dev-User")
     # A supplied Telegram credential is always validated; never fall back on failure.
     if authorization:
         if dev_user or not authorization.startswith("tma ") or not settings.telegram_bot_token:
             raise HTTPException(401, "Telegram authentication unavailable or ambiguous")
-        return validate_init_data(authorization[4:], settings.telegram_bot_token, settings.telegram_max_age_seconds)
+        identity = validate_init_data(authorization[4:], settings.telegram_bot_token, settings.telegram_max_age_seconds)
+        if settings.telegram_allowed_user_ids and int(identity.split(":", 1)[1]) not in settings.telegram_allowed_user_ids:
+            raise HTTPException(403, "This Telegram user is not enabled for VÉLOR")
+        return identity
     if dev_user and settings.environment != "production" and settings.enable_dev_auth:
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", dev_user):
             raise HTTPException(401, "Invalid local development user")

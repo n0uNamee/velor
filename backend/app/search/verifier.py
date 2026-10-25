@@ -210,9 +210,9 @@ class ProductVerifier:
             if selected_sizes and not eligible_sizes and not any("city" in reason for reason in reasons):
                 reasons.append("city availability and delivery are not coupled to the same priced inventory size")
             selected_sizes = eligible_sizes
-        if not extracted.condition or extracted.condition == "unknown":
+        if (not extracted.condition or extracted.condition == "unknown") and candidate.source_id != "okno":
             reasons.append("condition new/used unknown")
-        elif extracted.condition != "new":
+        elif extracted.condition not in {"new", "unknown", None}:
             request_text = _normal(" ".join(brief.search_queries))
             accepted = {
                 "used": ("б/у", "бу ", "подерж", "used", "винтаж", "vintage", "секонд", "second hand"),
@@ -232,7 +232,11 @@ class ProductVerifier:
         }
         if required_conditions and required_conditions != {extracted.condition}:
             reasons.append("product condition conflicts with requested condition or request is ambiguous")
-        style_ok, style_reasons = _lexical_match(extracted, brief)
+        checked_brief = brief
+        if candidate.source_id == "okno":
+            checked_brief = brief.model_copy(update={"search_queries": [brief.original_request_text], "preferences": []})
+            evidence.append("Проверены название/категория/цена/размер/наличие OKNO. Соответствие мягким предпочтениям профиля не подтверждено.")
+        style_ok, style_reasons = _lexical_match(extracted, checked_brief)
         reasons.extend(style_reasons)
         if style_ok:
             evidence.append("style_match: supported lexical garment/features only; no image or semantic model analysis")

@@ -1,11 +1,11 @@
-import { ArrowRight, Check, LockKeyhole } from 'lucide-react'
+import { ArrowRight, Check, LockKeyhole, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { ImageRef, Profile, ProfileInput } from '../types'
 import { Loading } from './Primitives'
 import { UploadField } from './UploadField'
 
-export function ProfileScreen({ profile, busy, onSave, onCancel }: { profile: Profile | null; busy: boolean; onSave: (input: ProfileInput) => Promise<boolean>; onCancel: () => void }) {
+export function ProfileScreen({ profile, busy, onSave, onCancel, onJuryDemo, juryBusy = false }: { profile: Profile | null; busy: boolean; onSave: (input: ProfileInput) => Promise<boolean>; onCancel: () => void; onJuryDemo?: () => void; juryBusy?: boolean }) {
   const [text, setText] = useState(profile?.style_text ?? '')
   const [images, setImages] = useState<ImageRef[]>(profile?.images ?? [])
   const [uploading, setUploading] = useState({ wardrobe: false, reference: false })
@@ -13,7 +13,7 @@ export function ProfileScreen({ profile, busy, onSave, onCancel }: { profile: Pr
   const addImage = (image: ImageRef) => setImages(previous => [...previous, image])
   const removeImage = (id: string) => setImages(previous => previous.filter(i => i.id !== id))
   async function submit(e: FormEvent) { e.preventDefault(); if (await onSave({ style_text: text.trim(), images })) setSaved(true) }
-  const disabled = busy || uploading.wardrobe || uploading.reference
+  const disabled = busy || juryBusy || uploading.wardrobe || uploading.reference
   return <main className="profile-layout page-enter">
     <aside className="profile-intro">
       <span className="eyebrow">ВАШ ЛИЧНЫЙ СТИЛЬ</span>
@@ -25,6 +25,7 @@ export function ProfileScreen({ profile, busy, onSave, onCancel }: { profile: Pr
     </aside>
     <form className="profile-form" onSubmit={e => void submit(e)}>
       <div className="section-heading"><span className="eyebrow">ПРОФИЛЬ</span><span className="subtle">{profile ? 'Можно изменить в любой момент' : 'Один раз — для всех будущих образов'}</span></div>
+      {onJuryDemo ? <div className="profile-summary"><Sparkles size={17} strokeWidth={1.3} /><div><strong>Заготовленный демонстрационный сценарий</strong><p>Каталог → отбор вещей → стилист → сохранение.</p></div><button type="button" onClick={onJuryDemo} disabled={disabled}>{juryBusy ? <Loading>Открываем демо</Loading> : 'Демо для жюри'}</button></div> : null}
       <label className="text-label" htmlFor="style-text">Что вам нравится носить?</label>
       <textarea id="style-text" value={text} onChange={e => { setText(e.target.value); setSaved(false) }} rows={5} placeholder="Люблю спокойные цвета, свободный крой и натуральные ткани. Не ношу яркие принты…" maxLength={6000} />
       <div className="suggestions">{['Минимализм', 'Свободный крой', 'Монохром', 'Натуральные ткани'].map(s => <button type="button" key={s} onClick={() => setText(t => `${t}${t.trim() ? ', ' : ''}${s.toLowerCase()}`)}>{s}<span>+</span></button>)}</div>

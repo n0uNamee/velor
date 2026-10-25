@@ -30,4 +30,4 @@ if __name__ == "__main__":
     load_local_config()
     sys.path.insert(0, str(ROOT / "backend"))
     import uvicorn
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000)
+    uvicorn.run("app.main:app", host="127.0.0.1", port=int(os.getenv("VELOR_PORT", "8000")))

@@ -122,12 +122,19 @@ export interface Health {
   status: string;
   mode: RuntimeMode;
   environment: string;
+  auth_status?: 'locked' | 'telegram' | 'local_dev' | 'web';
   providers: {
     brief: string | boolean | null;
     search: string | boolean | null;
     render: string | boolean | null;
   };
   search_workers: number;
+  catalog_source?: string;
+}
+
+export interface WebSession {
+  authenticated: boolean;
+  csrf_token?: string;
 }
 
 export interface ProfileInput {
